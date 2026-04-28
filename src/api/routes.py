@@ -5,6 +5,8 @@ from flask import Flask, request, jsonify, url_for, Blueprint
 from api.models import db, User
 from api.utils import generate_sitemap, APIException
 from flask_cors import CORS
+from sqlalchemy import select
+from werkzeug.security import generate_password_hash
 
 api = Blueprint('api', __name__)
 
@@ -20,3 +22,28 @@ def handle_hello():
     }
 
     return jsonify(response_body), 200
+
+@api.route('/auth', methods=['POST'])
+def auth():
+
+    body = request.get_json
+    user = db.session.execute(select(User).where(User.email == body['email'])).scalar_one_or_none()
+
+    if not body['email'] or not body['password']:
+        return jsonify({'success': False, 'data': 'missing info'}), 403
+    
+    if body['type'] == 'register':
+        if user:
+            return jsonify({'success': False, 'data': 'email taken'}), 403
+        
+        hashed = generate_password_hash(body['password'])
+        
+        # new_user = User(
+        #     email = body['email'],
+        #     password = body['password'],
+        #     is_active = True            
+        # )
+        
+        # db.session.add(new_user)
+        # db.session.commit()
+        return jsonify({'success': True, 'data': 'OK'}), 403
