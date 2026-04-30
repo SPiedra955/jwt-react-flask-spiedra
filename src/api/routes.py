@@ -1,12 +1,13 @@
 """
 This module takes care of starting the API Server, Loading the DB and Adding the endpoints
 """
-from flask import Flask, request, jsonify, url_for, Blueprint
+from flask import Flask, request, jsonify, url_for, Blueprint  # type: ignore
 from api.models import db, User
 from api.utils import generate_sitemap, APIException
-from flask_cors import CORS
-from sqlalchemy import select
-from werkzeug.security import generate_password_hash
+from flask_cors import CORS  # type: ignore
+from sqlalchemy import select  # type: ignore
+from werkzeug.security import generate_password_hash, check_password_hash  # type: ignore
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required  # type: ignore
 
 api = Blueprint('api', __name__)
 
@@ -23,27 +24,50 @@ def handle_hello():
 
     return jsonify(response_body), 200
 
+
 @api.route('/auth', methods=['POST'])
 def auth():
 
     body = request.get_json
-    user = db.session.execute(select(User).where(User.email == body['email'])).scalar_one_or_none()
+    user = db.session.execute(select(User).where(
+        User.email == body['email'])).scalar_one_or_none()
 
     if not body['email'] or not body['password']:
         return jsonify({'success': False, 'data': 'missing info'}), 403
-    
+
     if body['type'] == 'register':
         if user:
             return jsonify({'success': False, 'data': 'email taken'}), 403
-        
+
         hashed = generate_password_hash(body['password'])
-        
-        # new_user = User(
-        #     email = body['email'],
-        #     password = body['password'],
-        #     is_active = True            
-        # )
-        
-        # db.session.add(new_user)
-        # db.session.commit()
-        return jsonify({'success': True, 'data': 'OK'}), 403
+
+        new_user = User(
+            email=body['email'],
+            password=hashed,
+            is_active=True
+        )
+
+        db.session.add(new_user)
+        db.session.commit()
+        token = create_access_token(identity=str(new_user.id))
+        return jsonify({'success': True, 'data': new_user.serialize(), 'token': token}), 201
+
+    if body['type'] == 'login':
+        if not user:
+            return jsonify({'success': False, 'data': 'email not found'}), 404
+
+        if not check_password_hash(user.password, body['password']):
+            return jsonify({'success': False, 'data': 'incorrect email or password'}), 401
+        token = create_access_token(identity=str(user.id))
+        return jsonify({'success': True, 'data': user.serialize(), 'token': token}), 201
+    return jsonify({'success': False, 'data': '???'}), 418
+
+
+@api.route('/me', methods=['GET'])
+@jwt_required()
+def getMe():
+    id = get_jwt_identity()
+    user = db.session.get(User, id)
+    if not user:
+        return jsonify({'success': False, 'data': "I'm a teapot"}), 418
+    return jsonify({'success': True, 'data': user.serialize()}), 201
