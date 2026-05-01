@@ -9,13 +9,29 @@ authService.auth = async (formData) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(formData),
+      
     });
-    if (!resp.ok) throw new Error("error auth");
-    const data = await resp.json();
+
+    const text = await resp.text();
+
+    let data;
+    
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("Respuesta del backend no es JSON");
+    }
+
+    if (!resp.ok) {
+      throw new Error(data.data || "error auth");
+    }
+
     if (data.token) localStorage.setItem("token", data.token);
+
     return data;
   } catch (error) {
-    console.log(error);
+    console.log("ERROR:", error);
+    throw error;
   }
 };
 
